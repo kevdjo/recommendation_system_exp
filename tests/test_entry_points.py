@@ -1,5 +1,6 @@
 """Verify each shipped task's `run` is importable + shipped config parses."""
 
+
 def test_extract_run_is_callable() -> None:
     from me_recomendation.training.extract import run
 
@@ -36,13 +37,20 @@ def test_entry_points_tolerate_extra_job_params() -> None:
     from me_recomendation.training.transform import _parse as parse_transform
 
     argv = [
-        "--catalog", "c",
-        "--schema", "s",
-        "--raw_catalog", "rc",
-        "--raw_schema", "rs",
-        "--model_name", "m",
-        "--model_alias", "a",
-        "--future_param", "x",
+        "--catalog",
+        "c",
+        "--schema",
+        "s",
+        "--raw_catalog",
+        "rc",
+        "--raw_schema",
+        "rs",
+        "--model_name",
+        "m",
+        "--model_alias",
+        "a",
+        "--future_param",
+        "x",
     ]
     for parse in (parse_extract, parse_transform, parse_score_init):
         args = parse(argv)
