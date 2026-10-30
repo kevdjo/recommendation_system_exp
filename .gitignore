@@ -36,6 +36,7 @@ htmlcov/
 
 # --- Miscellaneous ---
 .dsh/
+.notes/
 
 # Produced by `make init` (uv python pin); requires-python in pyproject.toml is the source of truth.
 .python-version
