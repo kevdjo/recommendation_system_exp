@@ -32,7 +32,7 @@ user = os.environ.get("user", "")
 password = os.environ.get("password", "")
 table_name = os.environ.get("table_name", "")
 
-from me_recomendation.config.configuration import getConfig, setConfig
+from recommendation_system_exp.config.configuration import getConfig, setConfig
 
 
 def getLastFile(fdir, sc):
@@ -48,7 +48,7 @@ def getLastFile(fdir, sc):
 
 
 def getConfig(str1, str2, sc=None):
-    from me_recomendation.config.configuration import getConfig as _cfg_get
+    from recommendation_system_exp.config.configuration import getConfig as _cfg_get
 
     try:
         val = _cfg_get(str1, str2)
@@ -83,11 +83,11 @@ def getConfig(str1, str2, sc=None):
         elif str2 == "clustering_model_fpath":
             fdir = "./recommendation_system/model/clustering/"
             return fdir + getLastFile(fdir, sc) if sc else fdir
-        elif str2 == "simobi_preprocessing_fpath":
-            fdir = "./recommendation_system/pipeline/simobi/"
+        elif str2 == "mobi_preprocessing_fpath":
+            fdir = "./recommendation_system/pipeline/mobi/"
             return fdir + getLastFile(fdir, sc) if sc else fdir
-        elif str2 == "simobi_model_fpath":
-            fdir = "./recommendation_system/model/simobi/"
+        elif str2 == "mobi_model_fpath":
+            fdir = "./recommendation_system/model/mobi/"
             return fdir + getLastFile(fdir, sc) if sc else fdir
         elif str2 == "assembler_fpath":
             fdir = "./recommendation_system/pipeline/assembler/"
@@ -232,11 +232,11 @@ def model_comparison(spark):
         value = f"./recommendation_system/model/clustering/kmeans_{training_date}"
         setConfig("prediction", "clustering_model_fpath", value)
 
-        value = f"./recommendation_system/pipeline/simobi/preprocessing_{training_date}"
-        setConfig("prediction", "simobi_preprocessing_fpath", value)
+        value = f"./recommendation_system/pipeline/mobi/preprocessing_{training_date}"
+        setConfig("prediction", "mobi_preprocessing_fpath", value)
 
-        value = f"./recommendation_system/model/simobi/model_{training_date}"
-        setConfig("prediction", "simobi_model_fpath", value)
+        value = f"./recommendation_system/model/mobi/model_{training_date}"
+        setConfig("prediction", "mobi_model_fpath", value)
 
         value = f"./recommendation_system/pipeline/binarizer/binarizer_{training_date}"
         setConfig("prediction", "binarizer_fpath", value)
@@ -250,8 +250,8 @@ def model_comparison(spark):
         setConfig("prediction", "age_bucketizer_fpath")
         setConfig("prediction", "customer_preprocessing_fpath")
         setConfig("prediction", "clustering_model_fpath")
-        setConfig("prediction", "simobi_preprocessing_fpath")
-        setConfig("prediction", "simobi_model_fpath")
+        setConfig("prediction", "mobi_preprocessing_fpath")
+        setConfig("prediction", "mobi_model_fpath")
         setConfig("prediction", "binarizer_fpath")
 
 

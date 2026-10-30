@@ -39,7 +39,7 @@ def main(argv=None):
     max_date = dt_pr.strftime("%Y-%m-%d")
     dt_pr = dt_pr.strftime("%Y%m%d")
 
-    queries = "SELECT cif_number, flag_simobi, active_flag FROM {}.{} WHERE partition_date = '{}'".format(
+    queries = "SELECT cif_number, flag_mobi, active_flag FROM {}.{} WHERE partition_date = '{}'".format(
         "mldb", "mii_rs_customers", today.strftime("%Y-%m-%d")
     )
     df_customer = spark.sql(
@@ -293,17 +293,17 @@ def main(argv=None):
         customer_rfm[["cif_number", "rfm_description"]], on="cif_number", how="inner"
     )
     df_customer = df_customer.filter(F.col("rfm_description").isNotNull())
-    simobi_user = df_customer.filter(F.col("flag_simobi") == 1)
+    mobi_user = df_customer.filter(F.col("flag_mobi") == 1)
 
-    rfm_prob_simobi = get_summary(simobi_user, "rfm_description")
-    rfm_prob_simobi.drop(columns="percentage", inplace=True)
-    rfm_prob_simobi.columns = ["rfm_description", "total_simobi_user"]
+    rfm_prob_mobi = get_summary(mobi_user, "rfm_description")
+    rfm_prob_mobi.drop(columns="percentage", inplace=True)
+    rfm_prob_mobi.columns = ["rfm_description", "total_mobi_user"]
     rfm_prob_all = get_summary(df_customer, "rfm_description")
     rfm_prob_all.drop(columns="percentage", inplace=True)
     rfm_prob_all.columns = ["rfm_description", "total_customer"]
-    rfm_prob = rfm_prob_all.merge(rfm_prob_simobi, on=["rfm_description"])
+    rfm_prob = rfm_prob_all.merge(rfm_prob_mobi, on=["rfm_description"])
     rfm_prob["rfm_probability"] = (
-        round(rfm_prob["total_simobi_user"] / rfm_prob["total_customer"], 4) * 100
+        round(rfm_prob["total_mobi_user"] / rfm_prob["total_customer"], 4) * 100
     )
     rfm_prob["training_date"] = today.strftime("%Y-%m-%d")
 

@@ -119,7 +119,7 @@ def main(argv=None):
         "cif_creation_date",
         "active_flag",
         "age",
-        "flag_simobi",
+        "flag_mobi",
     ]
     categorical_cols = [
         c[0] for c in dataset.dtypes if c[1] == "string" and c[0] not in exCol
@@ -149,20 +149,20 @@ def main(argv=None):
     fe = Pipeline(stages=stages)
     preprocessing = fe.fit(dataset)
     train = preprocessing.transform(dataset).select(
-        "cif_number", "features", "flag_simobi", "active_flag"
+        "cif_number", "features", "flag_mobi", "active_flag"
     )
 
-    fpath = "./recommendation_system/pipeline/simobi/preprocessing_{}".format(
+    fpath = "./recommendation_system/pipeline/mobi/preprocessing_{}".format(
         today.strftime("%Y%m%d")
     )
     preprocessing.write().overwrite().save(fpath)
 
-    train = train.withColumnRenamed("flag_simobi", "label")
+    train = train.withColumnRenamed("flag_mobi", "label")
 
     estimator = GBTClassifier(featuresCol="features", labelCol="label")
     model = estimator.fit(train)
 
-    fpath = "./recommendation_system/model/simobi/model_{}".format(
+    fpath = "./recommendation_system/model/mobi/model_{}".format(
         today.strftime("%Y%m%d")
     )
     model.write().overwrite().save(fpath)
@@ -189,7 +189,7 @@ def main(argv=None):
         model_summary,
         spark,
         "mldb",
-        "mii_rs_simobi_model_summary",
+        "mii_rs_mobi_model_summary",
         partition="training_date",
     )
 
@@ -203,7 +203,7 @@ def main(argv=None):
 
     result = result.withColumn("predict_date", F.lit(today_str))
     writeData(
-        result, spark, "mldb", "mii_rs_simobi_probability", partition="predict_date"
+        result, spark, "mldb", "mii_rs_mobi_probability", partition="predict_date"
     )
 
     # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

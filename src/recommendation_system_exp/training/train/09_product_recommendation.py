@@ -166,7 +166,7 @@ sel_cols = [
     "new_customers",
     "join_month",
     "join_day",
-    "flag_simobi",
+    "flag_mobi",
     "payroll_flag",
     "active_flag",
 ]

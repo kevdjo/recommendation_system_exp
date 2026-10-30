@@ -211,7 +211,7 @@ def main(argv=None):
         "join_month",
         "join_day",
         "active_flag",
-        "flag_simobi",
+        "flag_mobi",
         "payroll_flag",
     ]
     sel_cols += [c + "Scaled" for c in numerical_cols] + [

@@ -54,7 +54,7 @@ def main(argv=None):
         "cif_number",
         "cif_creation_date",
         "active_flag",
-        "flag_simobi",
+        "flag_mobi",
         "sum_idr_balance_amount",
         "partition_date",
     ]
@@ -167,23 +167,21 @@ def main(argv=None):
 
     customers = customers.repartition("cif_number")
     transformed = transformed.join(
-        customers[["cif_number", "flag_simobi"]], on="cif_number", how="inner"
+        customers[["cif_number", "flag_mobi"]], on="cif_number", how="inner"
     )
 
     cluster_prob = get_summary(transformed, "cluster")
     cluster_prob.drop(columns="percentage", inplace=True)
     cluster_prob.columns = ["cluster", "total_customer"]
 
-    cluster_simobi = get_summary(
-        transformed.filter(F.col("flag_simobi") == 1), "cluster"
-    )
-    cluster_simobi.drop(columns="percentage", inplace=True)
-    cluster_simobi.columns = ["cluster", "simobi_user"]
+    cluster_mobi = get_summary(transformed.filter(F.col("flag_mobi") == 1), "cluster")
+    cluster_mobi.drop(columns="percentage", inplace=True)
+    cluster_mobi.columns = ["cluster", "mobi_user"]
 
-    cluster_probability = cluster_prob.merge(cluster_simobi, on=["cluster"])
+    cluster_probability = cluster_prob.merge(cluster_mobi, on=["cluster"])
     cluster_probability["cluster_probability"] = (
         round(
-            cluster_probability["simobi_user"] / cluster_probability["total_customer"],
+            cluster_probability["mobi_user"] / cluster_probability["total_customer"],
             4,
         )
         * 100

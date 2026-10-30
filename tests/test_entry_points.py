@@ -2,40 +2,40 @@
 
 
 def test_extract_run_is_callable() -> None:
-    from me_recomendation.training.extract import run
+    from recommendation_system_exp.training.extract import run
 
     assert callable(run)
 
 
 def test_transform_run_is_callable() -> None:
-    from me_recomendation.training.transform import run
+    from recommendation_system_exp.training.transform import run
 
     assert callable(run)
 
 
 def test_score_init_run_is_callable() -> None:
-    from me_recomendation.inference.init import run
+    from recommendation_system_exp.inference.init import run
 
     assert callable(run)
 
 
 def test_me_rec_runner_is_callable() -> None:
-    from me_recomendation.runner import run
+    from recommendation_system_exp.runner import run
 
     assert callable(run)
 
 
 def test_model_uri_shape() -> None:
-    from me_recomendation.common.mlflow import model_uri
+    from recommendation_system_exp.common.mlflow import model_uri
 
     assert model_uri("cat", "sch", "m", "champion") == "models:/cat.sch.m@champion"
 
 
 def test_entry_points_tolerate_extra_job_params() -> None:
-    from me_recomendation.training.extract import _parse as parse_extract
-    from me_recomendation.training.transform import _parse as parse_transform
+    from recommendation_system_exp.training.extract import _parse as parse_extract
+    from recommendation_system_exp.training.transform import _parse as parse_transform
 
-    from me_recomendation.inference.init import _parse as parse_score_init
+    from recommendation_system_exp.inference.init import _parse as parse_score_init
 
     argv = [
         "--catalog",
@@ -60,14 +60,14 @@ def test_entry_points_tolerate_extra_job_params() -> None:
 
 
 def test_shipped_config_parses() -> None:
-    from me_recomendation.config import load_config
+    from recommendation_system_exp.config import load_config
 
     cfg = load_config()
     assert cfg.project_name == "me_recomendation"
 
 
 def test_yaml_config_and_get_config() -> None:
-    from me_recomendation.config.configuration import getConfig
+    from recommendation_system_exp.config.configuration import getConfig
 
     assert getConfig("core", "day") == 2
     assert isinstance(getConfig("core", "list_table"), list)
@@ -75,6 +75,6 @@ def test_yaml_config_and_get_config() -> None:
 
 
 def test_support_function_importable() -> None:
-    from me_recomendation.support_function import getConfig as sf_getConfig
+    from recommendation_system_exp.support_function import getConfig as sf_getConfig
 
     assert sf_getConfig("core", "day") == 2

@@ -50,7 +50,7 @@ customer_data_preprocessing:
     - income_level
     - gender
     - job_desc
-    - flag_simobi
+    - flag_mobi
     - cif_syariah
   dpk_used_cols:
     - report_date
@@ -166,22 +166,3 @@ model_selection:
     - GBTClassifier
     - RandomForestClassifier
     - DecisionTreeClassifier
-
-prediction:
-  training_date: "2025-03-17"
-  fe_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/product_recommendation/feature_engineering_20250317"
-  model_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/model/product_recommendation/20250317/best_model_20250317"
-  recency_bucketizer_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/rfm/recency/recency_bucketizer_20250317"
-  frequency_bucketizer_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/rfm/frequency/frequency_bucketizer_20250317"
-  monetary_bucketizer_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/rfm/monetary/monetary_bucketizer_20250317"
-  age_bucketizer_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/bucketizer/age_bucketizer_20250317"
-  customer_preprocessing_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/preprocessing_customer/preprocessing_customer_20250317"
-  clustering_model_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/model/clustering/kmeans_20250317"
-  simobi_preprocessing_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/simobi/preprocessing_20250317"
-  simobi_model_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/model/simobi/model_20250317"
-  binarizer_fpath: "/Volumes/dev_catalog/me_recomendation/artifacts/pipeline/binarizer/binarizer_20250317"
-  experimentation_fpath: "/Volumes/dev_catalog/me_recomendation/reference/experimentation.csv"
-
-post_processing:
-  tnc_fpath: "/Volumes/dev_catalog/me_recomendation/hard_rules/term_and_condition.csv"
-  product_exclution_fpath: "/Volumes/dev_catalog/me_recomendation/hard_rules/product_exclution.csv"

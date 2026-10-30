@@ -351,13 +351,13 @@ if allTableReady:
         ),
     )
 
-    cat_col_list = [c for c in col_list if c not in ["flag_simobi", "job_desc"]]
+    cat_col_list = [c for c in col_list if c not in ["flag_mobi", "job_desc"]]
     cat_col_list.append("occupation")
     df_customer = fill_missing_with_mode(df_customer, cat_col_list)
 
     # Feature engineering
     df_customer = df_customer.withColumn(
-        "flag_simobi", F.when(df_customer["flag_simobi"] == "y", F.lit(1)).otherwise(0)
+        "flag_mobi", F.when(df_customer["flag_mobi"] == "y", F.lit(1)).otherwise(0)
     )
 
     for coln in ["marital_status", "income_level"]:
