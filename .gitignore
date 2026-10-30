@@ -1,0 +1,41 @@
+# --- Python / uv ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# uv.lock IS committed -- do not ignore it.
+
+# --- Build artifacts ---
+dist/
+build/
+*.whl
+
+# --- Databricks ---
+.databricks/
+.databricks-connect/
+*.databricks-connect
+.bundle/
+
+# --- Secrets / local env ---
+.env
+.env.*
+*.pem
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Test / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# --- Miscellaneous ---
+.dsh/
+
+# Produced by `make init` (uv python pin); requires-python in pyproject.toml is the source of truth.
+.python-version

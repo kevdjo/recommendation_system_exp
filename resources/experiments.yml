@@ -1,0 +1,8 @@
+# MLflow experiment, path-scoped per environment so dev runs never
+# mix with staging/prod runs.
+# Consumed by train_job via its `experiment_id` parameter (resources/jobs.yml).
+
+resources:
+  experiments:
+    training_experiment:
+      name: /Shared/${bundle.target}/recommendation_system_exp/experiments/training

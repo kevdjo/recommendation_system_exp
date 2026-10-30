@@ -1,0 +1,285 @@
+resources:
+  jobs:
+    # ------------------------------------------------------------------
+    # TRAINING -- weekly (train_job)
+    # ------------------------------------------------------------------
+    train_job:
+      name: "[${bundle.target}] recommendation_system_exp: train"
+      tags:
+        project: recommendation_system_exp
+        environment: ${bundle.target}
+        kind: training
+
+      max_concurrent_runs: 1
+      timeout_seconds: 14400
+      email_notifications:
+        on_failure:
+          - ${var.failure_email}
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - ../dist/*.whl
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: raw_catalog
+          default: ${var.raw_catalog}
+        - name: raw_schema
+          default: ${var.raw_schema}
+        - name: model_name
+          default: ${var.model_name}
+        - name: experiment_id
+          default: ${resources.experiments.training_experiment.id}
+
+      tasks:
+        - task_key: step_01_customer_preprocessing
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/1. customer data preprocessing.py"
+
+        - task_key: step_02_rfm_analysis
+          depends_on:
+            - task_key: step_01_customer_preprocessing
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/2. rfm_analysis.py"
+
+        - task_key: step_03_customer_segmentation
+          depends_on:
+            - task_key: step_02_rfm_analysis
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/3. customer segmentation.py"
+
+        - task_key: step_04_product_preprocessing
+          depends_on:
+            - task_key: step_01_customer_preprocessing
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/4. product data preprocessing.py"
+
+        - task_key: step_05_simobi_probability
+          depends_on:
+            - task_key: step_01_customer_preprocessing
+            - task_key: step_04_product_preprocessing
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/5. simobi reccomendation probability.py"
+
+        - task_key: step_06_product_transformation
+          depends_on:
+            - task_key: step_03_customer_segmentation
+            - task_key: step_04_product_preprocessing
+            - task_key: step_05_simobi_probability
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/6. product data transformation.py"
+
+        - task_key: step_07_model_selection
+          depends_on:
+            - task_key: step_06_product_transformation
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/7. product recommendation model selection.py"
+
+        - task_key: step_08_model_optimization
+          depends_on:
+            - task_key: step_07_model_selection
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/8. product recommendation optimization.py"
+
+        - task_key: step_09_product_recommendation
+          depends_on:
+            - task_key: step_08_model_optimization
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/9. product recommendation.py"
+
+        - task_key: step_10_post_processing
+          depends_on:
+            - task_key: step_09_product_recommendation
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "training/10. post processing.py"
+
+      schedule:
+        quartz_cron_expression: ${var.train_cron}
+        timezone_id: ${var.schedule_timezone}
+        pause_status: ${var.job_pause_status}
+
+    # ------------------------------------------------------------------
+    # INFERENCE -- daily (score_job)
+    # ------------------------------------------------------------------
+    score_job:
+      name: "[${bundle.target}] recommendation_system_exp: score"
+      tags:
+        project: recommendation_system_exp
+        environment: ${bundle.target}
+        kind: inference
+
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      email_notifications:
+        on_failure:
+          - ${var.failure_email}
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - ../dist/*.whl
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: model_name
+          default: ${var.model_name}
+        - name: model_alias
+          default: champion
+
+      tasks:
+        - task_key: score_01_customer_preprocessing
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 01_rs_data_preprocessing_customers_v1.0.py"
+
+        - task_key: score_02_rfm_analysis
+          depends_on:
+            - task_key: score_01_customer_preprocessing
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 02_rs_rfm_analysis_v1.0.py"
+
+        - task_key: score_03_simobi_probability
+          depends_on:
+            - task_key: score_02_rfm_analysis
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 03_rs_simobi_recommendation_probability_v1.0.py"
+
+        - task_key: score_04_product_preprocessing
+          depends_on:
+            - task_key: score_01_customer_preprocessing
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 04_rs_data_preprocessing_product_v1.0.py"
+
+        - task_key: score_05_master_table_transformation
+          depends_on:
+            - task_key: score_03_simobi_probability
+            - task_key: score_04_product_preprocessing
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 05_rs_master_table_transformation_v1.0.py"
+
+        - task_key: score_06_recommendation_prediction
+          depends_on:
+            - task_key: score_05_master_table_transformation
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 06_rs_recommendation_prediction_v1.0.py"
+
+        - task_key: score_07_post_processing
+          depends_on:
+            - task_key: score_06_recommendation_prediction
+          environment_key: default
+          max_retries: 0
+          python_wheel_task:
+            package_name: recommendation_system_exp
+            entry_point: me_rec_runner
+            parameters:
+              - "--task"
+              - "inference/prediction 07_rs_post_processing_v1.0.py"
+
+      schedule:
+        quartz_cron_expression: ${var.score_cron}
+        timezone_id: ${var.schedule_timezone}
+        pause_status: ${var.job_pause_status}

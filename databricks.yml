@@ -1,0 +1,87 @@
+# recommendation_system_exp/databricks.yml
+#
+# Databricks Asset Bundle for me_recomendation.
+# Project type: modeling_batch
+# Compute type: serverless
+
+bundle:
+  name: recommendation_system_exp
+
+include:
+  - resources/*.yml
+
+artifacts:
+  main_wheel:
+    type: whl
+    build: uv build --wheel
+    path: .
+
+variables:
+  catalog:
+    description: "UC catalog for this project's writes"
+    default: dev_catalog
+  schema:
+    description: "UC schema for this project (provisioned by infra/platform)"
+    default: me_recomendation
+  raw_catalog:
+    description: "UC catalog that holds upstream raw tables"
+    default: dev_raw_catalog
+  raw_schema:
+    description: "UC schema within raw_catalog for upstream raw tables"
+    default: raw
+  model_name:
+    description: "UC registered model name"
+    default: me_recomendation_model
+  job_pause_status:
+    description: "Whether scheduled jobs are active; only prod runs unpaused"
+    default: "PAUSED"
+  failure_email:
+    description: "Email to notify on job failure."
+
+  # Schedules
+  train_cron:
+    description: "Cron for train_job"
+    default: "0 0 2 ? * SUN"
+  score_cron:
+    description: "Cron for score_job"
+    default: "0 0 5 * * ?"
+  schedule_timezone:
+    description: "Timezone for schedules"
+    default: "Asia/Jakarta"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dev-workspace.cloud.databricks.com
+    run_as:
+      user_name: ${workspace.current_user.userName}
+    variables:
+      catalog: dev_catalog
+      raw_catalog: dev_raw_catalog
+      failure_email: ${workspace.current_user.userName}
+
+  staging:
+    mode: production
+    workspace:
+      host: https://staging-workspace.cloud.databricks.com
+    run_as:
+      service_principal_name: svc-dab-staging
+    variables:
+      catalog: stg_catalog
+      raw_catalog: stg_raw_catalog
+      failure_email: "<staging-team-alias@your-org.example>"
+      job_pause_status: "PAUSED"
+
+  prod:
+    mode: production
+    workspace:
+      host: https://prod-workspace.cloud.databricks.com
+    run_as:
+      service_principal_name: svc-dab-prod
+    variables:
+      catalog: prod_catalog
+      raw_catalog: prod_raw_catalog
+      failure_email: "<prod-oncall@your-org.example>"
+      job_pause_status: "UNPAUSED"
