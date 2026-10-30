@@ -4,18 +4,21 @@ Loaded from config.yaml.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
+
 import yaml
 
 _CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
-def _load_yaml_config() -> Dict[str, Any]:
+
+def _load_yaml_config() -> dict[str, Any]:
     if not _CONFIG_PATH.exists():
         return {}
     with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
-CONFIG_MAP: Dict[str, Any] = _load_yaml_config()
+
+CONFIG_MAP: dict[str, Any] = _load_yaml_config()
 
 
 def getConfig(key1: str, key2: str, sc=None) -> Any:
