@@ -13,5 +13,7 @@ class ProjectConfig(BaseModel):
 
 
 def load_config() -> ProjectConfig:
-    raw_yaml = files("me_recomendation.config").joinpath("config.yaml").read_text()
+    raw_yaml = (
+        files("recommendation_system_exp.config").joinpath("config.yaml").read_text()
+    )
     return ProjectConfig.model_validate(yaml.safe_load(raw_yaml))

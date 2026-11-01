@@ -5,28 +5,16 @@ import sys
 from datetime import datetime, timedelta
 
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
-from support_function import *
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import OUTPUT_DB, SOURCE_DB
+from recommendation_system_exp.support_function import *
 
 sys.path.insert(0, "./recommendation_system/script/")
 
-spark = (
-    SparkSession.builder.appName("recommendation_system")
-    .config("spark.driver.memory", "64g")  # '16g'
-    .config("spark.executor.cores", "5")
-    .config("spark.executor.instances", "14")  # '3'
-    .config("spark.executor.memory", "32g")  # '16g'
-    .config("spark.dynamicAllocation.enabled", "true")
-    .config("spark.debug.maxToStringFields", "100")
-    .config("spark.sql.crossJoin.enabled", "true")
-    .config("spark.driver.memoryOverhead", "8192")
-    .config("spark.executor.memoryOverhead", "8192")
-    .config("spark.network.timeout", "800")
-    .config("spark.yarn.queue", "root.hdp_ds")
-    .config("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "true")
-    .getOrCreate()
-)
+# Migration: Serverless manages compute; legacy YARN/executor configs removed.
+spark = get_spark()
 
 
 today = getConfig("core", "today")
@@ -38,7 +26,7 @@ max_date = dt_pr.strftime("%Y-%m-%d")
 dt_pr = dt_pr.strftime("%Y%m%d")
 
 # Load Customer Data
-db = "mldb"
+db = OUTPUT_DB
 table = "mii_rs_customers"
 queries = "SELECT cif_number FROM {}.{} WHERE partition_date = '{}'".format(
     db, table, today.strftime("%Y-%m-%d")
@@ -64,7 +52,7 @@ product_list = clean_text(product_list, coln)
 def get_dpk_product():
     # Core Banking Data
     dpk_used_cols = getConfig("product_data_preprocessing", "dpk_used_cols")
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_dpk"
     queries = "SELECT {} FROM {}.{}".format(",".join(dpk_used_cols), db, table)
     df_dpk = spark.sql(
@@ -89,6 +77,10 @@ def get_dpk_product():
     df_dpk = df_dpk.withColumn(
         "max_report_date",
         F.max("report_date").over(Window.partitionBy("account_number")),
+    )
+    df_dpk = df_dpk.filter(F.col("report_date") == F.col("max_report_date"))
+    df_dpk = df_dpk.withColumn(
+        "max_date", F.max("report_date").over(Window.partitionBy())
     )
     df_dpk = df_dpk.withColumn(
         "close_status",
@@ -130,7 +122,7 @@ def get_dpk_product():
 
 def get_banca_product():
     banca_used_cols = getConfig("product_data_preprocessing", "banca_used_cols")
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_banca_aum_summary"
     queries = "SELECT {} FROM {}.{}".format(", ".join(banca_used_cols), db, table)
     df_banca = spark.sql(
@@ -188,8 +180,8 @@ def get_banca_product():
 
 
 def get_cc_product():
-    cc_used_cols = getConfig("product_data_preprocessing", "cpert_used_cols")
-    db = "dm_analytics"
+    cc_used_cols = getConfig("product_data_preprocessing", "cport_used_cols")
+    db = SOURCE_DB
     table = "dm_cc_portfolio"
     queries = "SELECT {} FROM {}.{} WHERE corp_indiv_flag = 'INDIVIDUAL'".format(
         ", ".join(cc_used_cols), db, table
@@ -230,7 +222,7 @@ def get_cc_product():
     df_cc = df_cc.withColumnRenamed("cncl_dt", "account_close_date")
 
     ccc_used_cols = getConfig("product_data_preprocessing", "ccard_used_cols")
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_cc_card"
     queries = "SELECT {} FROM {}.{}".format(", ".join(ccc_used_cols), db, table)
     df_ccc = spark.sql(
@@ -271,7 +263,7 @@ def get_cc_product():
 def get_loan_product():
     # Loan Data
     loan_used_cols = getConfig("product_data_preprocessing", "loan_used_cols")
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_loan"
     queries = "SELECT {} FROM {}.{}".format(",".join(loan_used_cols), db, table)
     df_loan = spark.sql(
@@ -280,7 +272,7 @@ def get_loan_product():
     df_loan = df_loan.repartition("contract_no")
 
     used_cols = ["custcode", "payment_date", "payment_status"]
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_skala_rental_tab"
     queries = "SELECT {} FROM {}.{}".format(",".join(used_cols), db, table)
     df_srt = spark.sql(
@@ -368,7 +360,7 @@ def get_loan_product():
     )
     loan_journey = loan_journey.drop("account_open_date")
 
-    writeData(loan_journey, spark, "mldb", "mii_rs_loan_journey")
+    writeData(loan_journey, spark, OUTPUT_DB, "mii_rs_loan_journey")
 
     df_loan = df_loan.drop("fasilitas_kredit")
     return df_loan, loan_journey
@@ -376,7 +368,7 @@ def get_loan_product():
 
 def get_reksadana_product():
     reksa_used_cols = getConfig("product_data_preprocessing", "reksa_used_cols")
-    db = "dm_analytics"
+    db = SOURCE_DB
     table = "dm_reksadana"
     queries = "SELECT {} FROM {}.{}".format(", ".join(reksa_used_cols), db, table)
     df_reksa = spark.sql(
@@ -413,7 +405,7 @@ def get_reksadana_product():
     tmp = tmp.withColumn("prev_id", F.lag("id").over(w))
     tmp = tmp.withColumn(
         "diff",
-        F.when(F.isNull(F.col("id") - F.col("prev_id")), F.lit(0)).otherwise(
+        F.when((F.col("id") - F.col("prev_id")).isNull(), F.lit(0)).otherwise(
             F.col("id") - F.col("prev_id")
         ),
     )
@@ -500,7 +492,7 @@ if __name__ == "__main__":
     )
     cust_journey = cust_journey.drop("loan_credit_facility")
 
-    writeData(cust_journey, spark, "mldb", "mii_rs_customer_journey")
+    writeData(cust_journey, spark, OUTPUT_DB, "mii_rs_customer_journey")
 
     cond = [dataset["product"] == product_list["product_name_on_data"]]
     dataset = dataset.join(
@@ -515,7 +507,7 @@ if __name__ == "__main__":
     dataset = dataset.withColumn("training_date", F.lit(today.strftime("%Y-%m-%d")))
 
     writeData(
-        dataset, spark, "mldb", "mii_rs_product_portfolio", partition="training_date"
+        dataset, spark, OUTPUT_DB, "mii_rs_product_portfolio", partition="training_date"
     )
 
     # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

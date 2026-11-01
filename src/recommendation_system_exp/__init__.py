@@ -1,1 +1,1 @@
-"""me_recomendation package."""
+"""recommendation_system_exp package."""

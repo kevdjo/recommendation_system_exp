@@ -1,45 +1,14 @@
 # Project-level config.
-project_name: me_recomendation
+project_name: recommendation_system_exp
 
 core:
-  maximum_date: "2020-05-31"
+  # Migration: root for all persisted Spark ML artifacts, dictionaries and the
+  # cross-task config state file (overridable via runner --artifact_root).
+  artifact_root: "/Volumes/dev_catalog/recommendation_system_exp/artifacts"
   today: "2026-05-15"
   data_retention: 2
   day: 2
   is_training_date: false
-  list_table:
-    - dm_customer
-    - dm_dpk
-    - dm_banca_aum_summary
-    - dm_loan
-    - dm_skala_rental_tab
-    - dm_cc_card
-    - dm_cc_portfolio
-    - dm_reksadana
-    - dm_transaction_daily
-    - dm_transaction_payroll
-    - v_customer_age
-    - em_account
-    - em_customer
-    - em_finance_transaction
-    - em_lookup
-    - em_status
-  list_table_check:
-    - dm_customer
-    - dm_dpk
-    - dm_banca_aum_summary
-    - dm_loan
-    - dm_skala_rental_tab
-    - dm_cc_card
-    - dm_cc_portfolio
-    - dm_reksadana
-    - dm_transaction_daily
-    - v_customer_age
-    - em_account
-    - em_customer
-    - em_finance_transaction
-    - em_lookup
-    - em_status
 
 customer_data_preprocessing:
   cust_used_cols:
@@ -58,8 +27,8 @@ customer_data_preprocessing:
     - account_number
     - account_open_date
     - idr_balance_amount
-  occupation_fpath: "/Volumes/dev_catalog/me_recomendation/reference/occupation.csv"
-  zip_code_fpath: "/Volumes/dev_catalog/me_recomendation/reference/kode_pos.csv"
+  occupation_fpath: "${artifact_root}/reference/occupation.csv"
+  zip_code_fpath: "${artifact_root}/reference/kode_pos.csv"
   bl_zip_code:
     - "12345"
     - "11111"
@@ -98,7 +67,7 @@ customer_data_preprocessing:
     - 7
 
 product_data_preprocessing:
-  product_list_fpath: "/Volumes/dev_catalog/me_recomendation/reference/product_list.csv"
+  product_list_fpath: "${artifact_root}/reference/product_list.csv"
   pl_used_cols:
     - product_group
     - biu
@@ -166,3 +135,19 @@ model_selection:
     - GBTClassifier
     - RandomForestClassifier
     - DecisionTreeClassifier
+
+# Restored from the previous commit (simobi -> mobi).
+# Artifact keys (training_date, fe_fpath, model_fpath, *_bucketizer_fpath,
+# binarizer_fpath, customer_preprocessing_fpath, clustering_model_fpath,
+# mobi_preprocessing_fpath, mobi_model_fpath) are deliberately NOT set here:
+#   - when absent, support_function.getConfig falls back to the latest artifact
+#     under core.artifact_root (legacy behaviour);
+#   - model_comparison() (training step 08) persists training_date and the
+#     chosen paths into the state file, which inference reads.
+# To pin a specific training run, set them here or in the state file.
+prediction:
+  experimentation_fpath: "${artifact_root}/reference/experimentation.csv"
+
+post_processing:
+  tnc_fpath: "${artifact_root}/hard_rules/term_and_condition.csv"
+  product_exclution_fpath: "${artifact_root}/hard_rules/product_exclution.csv"

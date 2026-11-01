@@ -7,27 +7,24 @@ from itertools import chain
 
 import pyspark.sql.functions as F
 from pyspark.ml.feature import QuantileDiscretizer
-from pyspark.sql import SparkSession
-from support_function import get_summary, getConfig, writeData
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import (
+    ARTIFACT_ROOT,
+    OUTPUT_DB,
+    SOURCE_DB,
+)
+from recommendation_system_exp.support_function import (
+    get_summary,
+    getConfig,
+    writeData,
+)
 
 
 def main(argv=None):
     """Job entry point (design plan section 5.1, T1). Parameters: none."""
-    spark = (
-        SparkSession.builder.appName("recommendation_system")
-        .config("spark.driver.memory", "108g")  # 32
-        .config("spark.executor.cores", "8")  # 5
-        .config("spark.executor.instances", "11")  # 14
-        .config("spark.executor.memory", "64g")  # 32g
-        .config("spark.dynamicAllocation.enabled", "false")
-        .config("spark.debug.maxToStringFields", "100")
-        .config("spark.driver.memoryOverhead", "2048")
-        .config("spark.executor.memoryOverhead", "2048")
-        .config("spark.network.timeout", "800")
-        .config("spark.yarn.queue", "root.hdp_ds")
-        .config("spark.sql.autoBroadcastJoinThreshold", "-1")
-        .getOrCreate()
-    )
+    # Migration: Serverless manages compute; legacy YARN/executor configs removed.
+    spark = get_spark()
     sys.path.insert(0, "./recommendation_system/script/")
 
     today = getConfig("core", "today")
@@ -40,7 +37,7 @@ def main(argv=None):
     dt_pr = dt_pr.strftime("%Y%m%d")
 
     queries = "SELECT cif_number, flag_mobi, active_flag FROM {}.{} WHERE partition_date = '{}'".format(
-        "mldb", "mii_rs_customers", today.strftime("%Y-%m-%d")
+        OUTPUT_DB, "mii_rs_customers", today.strftime("%Y-%m-%d")
     )
     df_customer = spark.sql(
         queries
@@ -50,7 +47,7 @@ def main(argv=None):
 
     trans_cols = getConfig("rfm_data_preprocessing", "transaction_cols")
     queries = "SELECT {} FROM {}.{}".format(
-        ",".join(trans_cols), "dm_analytics", "dm_transaction_daily"
+        ",".join(trans_cols), SOURCE_DB, "dm_transaction_daily"
     )
     dn_transaction = spark.sql(
         queries
@@ -98,10 +95,8 @@ def main(argv=None):
 
     # emoney transction
     tr_cols = getConfig("rfm_data_preprocessing", "em_transaction_cols")
-    queries = (
-        "SELECT {} FROM dm_analytics.em_finance_transaction WHERE dt_pr='{}'".format(
-            ", ".join(tr_cols), dt_pr
-        )
+    queries = "SELECT {} FROM {db}.em_finance_transaction WHERE dt_pr='{}'".format(
+        ", ".join(tr_cols), dt_pr, db=SOURCE_DB
     )
     em_transaction = spark.sql(
         queries
@@ -109,8 +104,8 @@ def main(argv=None):
     em_transaction = em_transaction.drop_duplicates()
 
     sts_cols = ["id", "name"]
-    queries = "SELECT {} FROM dm_analytics.em_status WHERE dt_pr='{}'".format(
-        ", ".join(sts_cols), dt_pr
+    queries = "SELECT {} FROM {db}.em_status WHERE dt_pr='{}'".format(
+        ", ".join(sts_cols), dt_pr, db=SOURCE_DB
     )
     em_status = spark.sql(
         queries
@@ -133,8 +128,8 @@ def main(argv=None):
 
     em_transaction = em_transaction.filter(F.col("transaction_date") >= "2020-03-09")
 
-    queries = "select account_id, cif_number from mldb.mii_rs_emoney where partition_date='{}'".format(
-        today.strftime("%Y-%m-%d")
+    queries = "select account_id, cif_number from {db}.mii_rs_emoney where partition_date='{}'".format(
+        today.strftime("%Y-%m-%d"), db=OUTPUT_DB
     )
     em_customer = spark.sql(
         queries
@@ -199,9 +194,8 @@ def main(argv=None):
         bucketizer = qds.fit(customer_rfm)
         customer_rfm = bucketizer.transform(customer_rfm)
         bucketizer.write().overwrite().save(
-            "./recommendation_system/pipeline/rfm/{}/{}_bucketizer_{}".format(
-                c, c, today.strftime("%Y%m%d")
-            )
+            ARTIFACT_ROOT
+            + "/pipeline/rfm/{}/{}_bucketizer_{}".format(c, c, today.strftime("%Y%m%d"))
         )
 
     c = "recency"
@@ -284,7 +278,11 @@ def main(argv=None):
     )
 
     writeData(
-        customer_rfm, spark, "mldb", "mii_rs_customer_rfm", partition="partition_date"
+        customer_rfm,
+        spark,
+        OUTPUT_DB,
+        "mii_rs_customer_rfm",
+        partition="partition_date",
     )
     customer_rfm = customer_rfm.repartition("cif_number")
 
@@ -310,7 +308,7 @@ def main(argv=None):
     rfm_prob = spark.createDataFrame(rfm_prob)
 
     writeData(
-        rfm_prob, spark, "mldb", "mii_rs_rfm_probability", partition="training_date"
+        rfm_prob, spark, OUTPUT_DB, "mii_rs_rfm_probability", partition="training_date"
     )
 
     # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

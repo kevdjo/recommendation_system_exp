@@ -9,6 +9,11 @@ from datetime import datetime
 import pandas as pd
 import pyspark.sql.functions as F
 from pyspark.ml import Pipeline
+from pyspark.ml.classification import (  # noqa: F401  (used via eval)
+    DecisionTreeClassifier,
+    GBTClassifier,
+    RandomForestClassifier,
+)
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import (
     MinMaxScaler,
@@ -17,95 +22,29 @@ from pyspark.ml.feature import (
     VectorAssembler,
 )
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
-from pyspark.sql import SparkSession
 from pyspark.sql.types import FloatType
 from pyspark.sql.window import Window
-from support_function import *
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB
+from recommendation_system_exp.support_function import *
 
 log: logging.Logger = logging.getLogger(__name__)
 
 
 def main(argv=None):
     """Job entry point (design plan section 5.1, T1). Parameters: none."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
 
     get_probability = F.udf(lambda v: float(v[1]), FloatType())
 
-    # spark = (SparkSession
-    #         .builder
-    #         .appName('recommendation_system')
-    #         .config('spark.driver.memory', '63g') #'8g')
-    #         .config('spark.executor.cores', '8')
-    #         .config('spark.executor.instances', '14') #'3')
-    #         .config('spark.executor.memory', '125g') #'8g')
-    #         .config('spark.dynamicAllocation.enabled', 'false')
-    #         .config('spark.debug.maxToStringFields', "100")
-    #         .config('spark.sql.crossJoin.enabled', "true")
-    #         .config('spark.driver.memoryOverhead', '8192') #'4096'
-    #         .config('spark.executor.memoryOverhead', '8192') #'4096'
-    #         .config('spark.network.timeout', '800')
-    #         .config("spark.yarn.queue", "root.hdp_ds")
-    #         .config("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "true")
-    # spark = (SparkSession
-    #         .builder
-    #         .appName('recommendation_system')
-    #         .config('spark.driver.memory', '10g') #16g
-    #         .config('spark.executor.cores', '5') #'5'
-    #         .config('spark.executor.instances', '15')
-    #         .config('spark.executor.memory', '20g') #16g
-    #         .config('spark.dynamicAllocation.enabled', 'true') #'true'
-    #         .config('spark.debug.maxToStringFields', "25")
-    #         .config('spark.sql.crossJoin.enabled', "true")
-    #         .config('spark.driver.memoryOverhead', '8192') #2048
-    #         .config('spark.executor.memoryOverhead', '8192') #2048
-    #         .config('spark.network.timeout', '800')
-    #         .config("spark.yarn.queue", "root.hdp_ds")
-    #         .config('spark.default.parallelism', "100")
-    #         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    #         .config("spark.shuffle.partitions", "100")
-    #         .config("spark.sql.shuffle.partitions", "100")
-    #         .config("spark.shuffle.partitions", "100")
-    #         .config("spark.shuffle.compression.codec", "snappy")
-    #         .config("spark.sql.execution.arrow.enabled", "true")
-    #         .config("spark.sql.execution.arrow.fallback.enabled", "true")
-    #         .enableHiveSupport()
-    #         .getOrCreate())
-    spark = (
-        SparkSession.builder.appName("Recomendation System")
-        .config("spark.driver.memory", "20g")  # 16g
-        .config("spark.executor.cores", "5")  #'5'
-        .config("spark.executor.instances", "15")
-        .config("spark.executor.memory", "30g")  # 16g
-        .config("spark.dynamicAllocation.enabled", "true")  #'true'
-        .config("spark.debug.maxToStringFields", "100")
-        .config("spark.sql.crossJoin.enabled", "true")
-        .config("spark.driver.maxResultSize", "10g")
-        .config("spark.driver.memoryOverhead", "8192")  # 2048
-        .config("spark.executor.memoryOverhead", "8192")  # 2048
-        .config("spark.network.timeout", "800")
-        .config("spark.yarn.queue", "root.hdp_ds")
-        .config("spark.default.parallelism", "50")
-        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .config("spark.kryoserializer.buffer.max", "2048m")
-        .config("spark.shuffle.partitions", "200")
-        .config("spark.sql.shuffle.partitions", "200")
-        .config("spark.shuffle.partitions", "200")
-        .config("spark.shuffle.compression.codec", "snappy")
-        .config("spark.sql.autoBroadcastJoinThreshold", "-1")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .config("spark.sql.execution.arrow.fallback.enabled", "true")
-        .getOrCreate()
-    )
+    # Migration: Serverless manages compute; legacy YARN/executor configs removed.
+    spark = get_spark()
     sys.path.insert(0, "./recommendation_system/script/")
 
     today = getConfig("core", "today")
     today = datetime.strptime(today, "%Y-%m-%d")
 
-    # add by rendi to avoid table need refresh
-    spark.sql("REFRESH TABLE mldb.mii_rs_tf_product_portfolio")
-    queries = "SELECT * FROM mldb.mii_rs_tf_product_portfolio"
+    queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_tf_product_portfolio"
     dataset = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_tf_product_portfolio (K7 tables, K4-TBL-004)
@@ -141,9 +80,7 @@ def main(argv=None):
         .max_month_int
     )
 
-    # add by rendi to avoid table need refresh
-    spark.sql("REFRESH TABLE mldb.mii_rs_master_customers")
-    queries = "SELECT * FROM mldb.mii_rs_master_customers"
+    queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_master_customers"
     df_details = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_master_customers (K7 tables, K4-TBL-004)
@@ -185,7 +122,8 @@ def main(argv=None):
     df_details = fe_model.transform(df_details)
 
     fpath = (
-        "./recommendation_system/pipeline/product_recommendation/feature_engineering_"
+        ARTIFACT_ROOT
+        + "/pipeline/product_recommendation/feature_engineering_"
         + today.strftime("%Y%m%d")
     )
     fe_model.write().overwrite().save(fpath)
@@ -234,7 +172,7 @@ def main(argv=None):
     w = Window().partitionBy("cif_number").orderBy("month_int")
     shift_val = 1
     name = "id_shift_" + str(shift_val)
-    dataset = dataset.withColumn(name, F.lag("cif_number", count=shift_val).over(w))
+    dataset = dataset.withColumn(name, F.lag("cif_number", offset=shift_val).over(w))
     dataset = dataset.withColumn(
         name, F.when(F.col(name).isNull(), 0).otherwise(F.col(name))
     )
@@ -247,7 +185,7 @@ def main(argv=None):
 
     for p in product:
         name = p + "_s_" + str(shift_val)
-        dataset = dataset.withColumn(name, F.lag(p, count=shift_val).over(w))
+        dataset = dataset.withColumn(name, F.lag(p, offset=shift_val).over(w))
         diff_cond = "diff_cond_" + str(shift_val)
         dataset = dataset.withColumn(
             name, F.when(F.col(diff_cond) == 1, F.lit(0)).otherwise(F.col(name))
@@ -276,7 +214,7 @@ def main(argv=None):
     ]
 
     # load model summary
-    queries = "SELECT * FROM mldb.mii_rs_model_summary"
+    queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_model_summary"
     model_summary = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_model_summary (K7 tables, K4-TBL-004)
@@ -329,7 +267,7 @@ def main(argv=None):
         assembler = VectorAssembler(
             inputCols=assemblerInputs, outputCol="features", handleInvalid="skip"
         )
-        fpath = "./recommendation_system/pipeline/assembler/{}/assembler_{}_{}".format(
+        fpath = ARTIFACT_ROOT + "/pipeline/assembler/{}/assembler_{}_{}".format(
             today.strftime("%Y%m%d"), today.strftime("%Y%m%d"), target_col
         )
 
@@ -359,8 +297,11 @@ def main(argv=None):
 
         model = tvs.fit(train)
 
-        fpath = "./recommendation_system/model/product_recommendation/{}/best_model_{}_{}".format(
-            today.strftime("%Y%m%d"), today.strftime("%Y%m%d"), target_col
+        fpath = (
+            ARTIFACT_ROOT
+            + "/model/product_recommendation/{}/best_model_{}_{}".format(
+                today.strftime("%Y%m%d"), today.strftime("%Y%m%d"), target_col
+            )
         )
         model.bestModel.write().overwrite().save(fpath)
 
@@ -369,7 +310,7 @@ def main(argv=None):
         fi.sort_values(by="coefficient", inplace=True, ascending=False)
         fi.reset_index(drop=True, inplace=True)
         fi["product"] = target_col
-        feature_importances = feature_importances.append(fi, ignore_index=True)
+        feature_importances = pd.concat([feature_importances, fi], ignore_index=True)
 
         log.info("Get the result")
         test_result = model.transform(test)
@@ -437,7 +378,7 @@ def main(argv=None):
     writeData(
         feature_importances,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_feature_importances",
         partition="training_date",
     )
@@ -446,7 +387,7 @@ def main(argv=None):
     writeData(
         train_summary,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_best_model_summary",
         partition="training_date",
     )

@@ -5,50 +5,31 @@ import sys
 from datetime import datetime
 
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
-from support_function import getConfig, setConfig, writeData
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB  # noqa: F401
+from recommendation_system_exp.support_function import getConfig, setConfig, writeData
 
 
 def main(argv=None):
     """Job entry point (design plan section 5.1, T1). Parameters: none."""
 
-    spark = (
-        SparkSession.builder.appName("recommendation_system")
-        .config("spark.driver.memory", "16g")  # 16g
-        .config("spark.executor.cores", "5")  #'5'
-        .config("spark.executor.instances", "11")
-        .config("spark.executor.memory", "32g")  # 16g
-        .config("spark.dynamicAllocation.enabled", "true")  #'true'
-        .config("spark.debug.maxToStringFields", "25")
-        .config("spark.sql.crossJoin.enabled", "false")
-        .config("spark.driver.memoryOverhead", "8192")  # 2048
-        .config("spark.executor.memoryOverhead", "8192")  # 2048
-        .config("spark.network.timeout", "800")
-        .config("spark.yarn.queue", "root.hdp_ds")
-        .config("spark.default.parallelism", "50")
-        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .config("spark.shuffle.partitions", "100")
-        .config("spark.sql.shuffle.partitions", "100")
-        .config("spark.shuffle.partitions", "100")
-        .config("spark.shuffle.compression.codec", "snappy")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .config("spark.sql.execution.arrow.fallback.enabled", "true")
-        .getOrCreate()
-    )
+    # Migration: Serverless manages compute; legacy YARN/executor configs removed.
+    spark = get_spark()
     sys.path.insert(0, "./recommendation_system/script/")
     today = getConfig("core", "today")
     today = datetime.strptime(today, "%Y-%m-%d")
 
-    queries = "SELECT * FROM mldb.mii_rs_product_recommendation WHERE predict_date = '{}'".format(
-        today.strftime("%Y-%m-%d")
+    queries = "SELECT * FROM {db}.mii_rs_product_recommendation WHERE predict_date = '{}'".format(
+        today.strftime("%Y-%m-%d"), db=OUTPUT_DB
     )
     product_recommendation = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_product_recommendation (K7 tables, K4-TBL-004)
 
-    queries = "SELECT cif_number, biu FROM mldb.mii_rs_product_portfolio WHERE training_date = '{}'".format(
-        today.strftime("%Y-%m-%d")
+    queries = "SELECT cif_number, biu, account_close_date FROM {db}.mii_rs_product_portfolio WHERE training_date = '{}'".format(
+        today.strftime("%Y-%m-%d"), db=OUTPUT_DB
     )
     product = spark.sql(
         queries
@@ -76,8 +57,8 @@ def main(argv=None):
             ~F.col("product").isin(product_exclution)
         )
 
-    queries = "SELECT * FROM mldb.mii_rs_customers WHERE partition_date = '{}'".format(
-        today.strftime("%Y-%m-%d")
+    queries = "SELECT * FROM {db}.mii_rs_customers WHERE partition_date = '{}'".format(
+        today.strftime("%Y-%m-%d"), db=OUTPUT_DB
     )
     customers = spark.sql(
         queries
@@ -89,9 +70,9 @@ def main(argv=None):
     tnc = spark.read.csv(tnc_fpath, header=True, inferSchema=True).toPandas()
 
     tnc["product"] = tnc["product"].str.lower()
-    tnc["product"].replace(" ", "_", inplace=True, regex=True)
+    tnc["product"] = tnc["product"].replace(" ", "_", regex=True)
     tnc["field"] = tnc["field"].str.lower()
-    tnc["field"].replace(" ", "_", inplace=True, regex=True)
+    tnc["field"] = tnc["field"].replace(" ", "_", regex=True)
 
     for i, p in enumerate(tnc["product"].unique()):
         tmp = customers.filter(F.col("product") == p)
@@ -103,8 +84,7 @@ def main(argv=None):
             # print(f, value)
             if filter_type == "range":
                 minVal, maxVal = [float(x.strip()) for x in value.split("-")]
-                tmp = tmp.filter((F.col(f) < minVal) & F.col(f) > maxVal)
-                tmp = tmp.filter()
+                tmp = tmp.filter((F.col(f) < minVal) | (F.col(f) > maxVal))
             elif filter_type == "list":
                 values = [s.strip().lower() for s in value.split(",")]
                 tmp = tmp.filter(~F.col(f).isin(values))
@@ -166,8 +146,8 @@ def main(argv=None):
         F.when(F.col("active_account") == 1, F.lit("1")).otherwise(">1"),
     )
 
-    queries = "SELECT cif_number, rfm_description FROM mldb.mii_rs_customer_rfm WHERE partition_date = '{}'".format(
-        today.strftime("%Y-%m-%d")
+    queries = "SELECT cif_number, rfm_description FROM {db}.mii_rs_customer_rfm WHERE partition_date = '{}'".format(
+        today.strftime("%Y-%m-%d"), db=OUTPUT_DB
     )
     rfm_customer = spark.sql(
         queries
@@ -184,7 +164,7 @@ def main(argv=None):
     writeData(
         result,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_final_product_recommendation",
         partition="predict_date",
     )

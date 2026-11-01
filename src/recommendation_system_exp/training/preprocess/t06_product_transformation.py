@@ -10,7 +10,6 @@ import numpy as np
 sys.path.insert(0, "./recommendation_system/script/")
 import pandas as pd
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import PandasUDFType, pandas_udf
 from pyspark.sql.types import (
     IntegerType,
@@ -18,31 +17,20 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from support_function import getConfig, writeData
 
-spark = (
-    SparkSession.builder.appName("recommendation_system")
-    .config("spark.driver.memory", "32g")  #'25g'
-    .config("spark.executor.cores", "5")
-    .config("spark.executor.instances", "14")
-    .config("spark.executor.memory", "32g")  #'25g'
-    .config("spark.dynamicAllocation.enabled", "false")
-    .config("spark.debug.maxToStringFields", "100")
-    .config("spark.sql.crossJoin.enabled", "true")
-    .config("spark.driver.memoryOverhead", "5120")  #'5120'
-    .config("spark.executor.memoryOverhead", "5120")  #'5120'
-    .config("spark.network.timeout", "300000")
-    .config("spark.yarn.queue", "root.hdp_ds")
-    .config("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "true")
-    .getOrCreate()
-)
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB  # noqa: F401
+from recommendation_system_exp.support_function import getConfig, writeData
+
+# Migration: Serverless manages compute; legacy YARN/executor configs removed.
+spark = get_spark()
 
 
 today = getConfig("core", "today")
 today = datetime.strptime(today, "%Y-%m-%d")
 
 queries = "SELECT * FROM {}.{} WHERE training_date = '{}'".format(
-    "mldb", "mii_rs_product_portfolio", today.strftime("%Y-%m-%d")
+    OUTPUT_DB, "mii_rs_product_portfolio", today.strftime("%Y-%m-%d")
 )
 df = spark.sql(
     queries
@@ -94,7 +82,7 @@ def get_transformed_data(df, product):
                     last_close.loc[last_close["partition_date"] == close_date, k] = (
                         x - c[k]
                     )
-                result = result.append(last_close)
+                result = pd.concat([result, last_close])
                 result = result.sort_values("partition_date")
                 close_dates.remove(close_date)
             elif close_date == open_date:
@@ -130,7 +118,7 @@ def get_transformed_data(df, product):
                 ].to_list()[0]
                 last_open.loc[last_open["partition_date"] == open_date, k] = x + c[k]
 
-            result = result.append(last_open)
+            result = pd.concat([result, last_open])
             open_dates.remove(open_date)
         except:
             pass
@@ -158,6 +146,6 @@ def transform_data(df):
 dataset = df.groupBy("cif_number").apply(transform_data)
 dataset = dataset.withColumn("training_date", F.lit(today.strftime("%Y-%m-%d")))
 
-writeData(dataset, spark, "mldb", "mii_rs_tf_product_portfolio")
+writeData(dataset, spark, OUTPUT_DB, "mii_rs_tf_product_portfolio")
 
 # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

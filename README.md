@@ -1,4 +1,4 @@
-# me_recomendation
+# recommendation_system_exp
 
 Databricks batch workload deployed via Databricks Asset Bundles (DAB).
 
@@ -29,13 +29,13 @@ make validate
 make deploy-dev
 # 7. Run jobs in dev
 make run-train-dev
-make run-score-dev
+
 ```
 
 ## Structure
 
 ```
-src/me_recomendation/
+src/recommendation_system_exp/
 ├── common/         # SparkSession, task values, MLflow helpers
 ├── config/         # config.yaml + Pydantic schema
 ├── training/       # Training tasks (extract -> transform)

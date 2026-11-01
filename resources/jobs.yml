@@ -4,7 +4,7 @@ resources:
     # TRAINING -- weekly (train_job)
     # ------------------------------------------------------------------
     train_job:
-      name: "[${bundle.target}] recommendation_system_exp: train"
+      name: "recommendation_system_exp: train"
       tags:
         project: recommendation_system_exp
         environment: ${bundle.target}
@@ -18,7 +18,7 @@ resources:
       environments:
         - environment_key: default
           spec:
-            environment_version: "3"
+            environment_version: "6"
             dependencies:
               - ../dist/*.whl
 
@@ -27,74 +27,126 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
-        - name: raw_catalog
-          default: ${var.raw_catalog}
-        - name: raw_schema
-          default: ${var.raw_schema}
         - name: model_name
           default: ${var.model_name}
         - name: experiment_id
           default: ${resources.experiments.training_experiment.id}
+        # Migration: UC Volume holding Spark ML artifacts + cross-task config state
+        - name: artifact_root
+          default: /Volumes/${var.catalog}/${var.schema}/artifacts
+        # Schemas the legacy mldb.* / dm_analytics.* table names resolve to
+        - name: output_db
+          default: ${var.output_db}
+        - name: source_db
+          default: ${var.source_db}
+        # Run date (YYYY-MM-DD) read by step_01 and passed to later steps via the
+        # config state file; empty = today. Set it to backfill.
+        - name: today
+          default: ""
 
       tasks:
+        # Note: step_04 runs file 05_product_* and step_05 runs file 04_mobi_*.
+        # File numbers do not reflect execution order; these edges do.
         - task_key: step_01_customer_preprocessing
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/1. customer data preprocessing.py"
+              - "training/preprocess/t01_customer_preprocessing.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
+              - "--today={{job.parameters.today}}"
 
         - task_key: step_02_rfm_analysis
           depends_on:
             - task_key: step_01_customer_preprocessing
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/2. rfm_analysis.py"
+              - "training/preprocess/t02_rfm_analysis.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_03_customer_segmentation
           depends_on:
             - task_key: step_02_rfm_analysis
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/3. customer segmentation.py"
+              - "training/preprocess/t03_customer_segmentation.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_04_product_preprocessing
           depends_on:
             - task_key: step_01_customer_preprocessing
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/4. product data preprocessing.py"
+              - "training/preprocess/t04_product_preprocessing.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_05_mobi_probability
           depends_on:
-            - task_key: step_01_customer_preprocessing
+            - task_key: step_02_rfm_analysis
+            - task_key: step_03_customer_segmentation
             - task_key: step_04_product_preprocessing
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/5. mobi reccomendation probability.py"
+              - "training/preprocess/t05_mobi_probability.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_06_product_transformation
           depends_on:
@@ -102,61 +154,101 @@ resources:
             - task_key: step_04_product_preprocessing
             - task_key: step_05_mobi_probability
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/6. product data transformation.py"
+              - "training/preprocess/t06_product_transformation.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_07_model_selection
           depends_on:
             - task_key: step_06_product_transformation
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/7. product recommendation model selection.py"
+              - "training/train/t07_model_selection.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_08_model_optimization
           depends_on:
             - task_key: step_07_model_selection
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/8. product recommendation optimization.py"
+              - "training/train/t08_model_optimization.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_09_product_recommendation
           depends_on:
             - task_key: step_08_model_optimization
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/9. product recommendation.py"
+              - "training/train/t09_product_recommendation.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
         - task_key: step_10_post_processing
           depends_on:
             - task_key: step_09_product_recommendation
           environment_key: default
-          max_retries: 1
+          max_retries: 0  # appends are not idempotent; re-enable once stable
           python_wheel_task:
             package_name: recommendation_system_exp
             entry_point: me_rec_runner
             parameters:
               - "--task"
-              - "training/10. post processing.py"
+              - "training/postprocess/t10_post_processing.py"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+              - "--artifact_root"
+              - "{{job.parameters.artifact_root}}"
+              - "--output_db"
+              - "{{job.parameters.output_db}}"
+              - "--source_db"
+              - "{{job.parameters.source_db}}"
 
       schedule:
         quartz_cron_expression: ${var.train_cron}

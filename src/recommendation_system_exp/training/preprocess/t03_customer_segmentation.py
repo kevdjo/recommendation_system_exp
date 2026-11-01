@@ -16,35 +16,29 @@ from pyspark.ml.feature import (
     StringIndexer,
     VectorAssembler,
 )
-from pyspark.sql import SparkSession
-from support_function import get_summary, getConfig, writeData
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB
+from recommendation_system_exp.support_function import (
+    get_summary,
+    getConfig,
+    writeData,
+)
 
 K = 15
 
 
 def main(argv=None):
     """Job entry point (design plan section 5.1, T1). Parameters: none."""
-    spark = (
-        SparkSession.builder.appName("recommendation_system")
-        .config("spark.driver.memory", "32g")  # 32g
-        .config("spark.executor.cores", "5")
-        .config("spark.executor.instances", "14")
-        .config("spark.executor.memory", "32g")
-        .config("spark.dynamicAllocation.enabled", "false")
-        .config("spark.debug.maxToStringFields", "100")
-        .config("spark.driver.memoryOverhead", "8192")
-        .config("spark.executor.memoryOverhead", "8192")
-        .config("spark.network.timeout", "800")
-        .config("spark.yarn.queue", "root.hdp_ds")
-        .getOrCreate()
-    )
+    # Migration: Serverless manages compute; legacy YARN/executor configs removed.
+    spark = get_spark()
     sys.path.insert(0, "./recommendation_system/script/")
 
     today = getConfig("core", "today")
     today = datetime.strptime(today, "%Y-%m-%d")
 
     queries = "SELECT * FROM {}.{} WHERE partition_date = '{}'".format(
-        "mldb", "mii_rs_customers", today.strftime("%Y-%m-%d")
+        OUTPUT_DB, "mii_rs_customers", today.strftime("%Y-%m-%d")
     )
     customers = spark.sql(
         queries
@@ -69,9 +63,8 @@ def main(argv=None):
     exclude_col.append(c)
 
     bucketizer.write().overwrite().save(
-        "./recommendation_system/pipeline/bucketizer/age_bucketizer_{}".format(
-            today.strftime("%Y%m%d")
-        )
+        ARTIFACT_ROOT
+        + "/pipeline/bucketizer/age_bucketizer_{}".format(today.strftime("%Y%m%d"))
     )
 
     categorical_features = [
@@ -98,7 +91,8 @@ def main(argv=None):
     train = pipelineModel.transform(customers).select("cif_number", "features")
 
     pipelineModel.write().overwrite().save(
-        "./recommendation_system/pipeline/preprocessing_customer/preprocessing_customer_{}".format(
+        ARTIFACT_ROOT
+        + "/pipeline/preprocessing_customer/preprocessing_customer_{}".format(
             today.strftime("%Y%m%d")
         )
     )
@@ -146,15 +140,13 @@ def main(argv=None):
     writeData(
         clustering_summary,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_clustering_model_summary",
         partition="training_date",
     )
 
     bestModel.write().overwrite().save(
-        "./recommendation_system/model/clustering/kmeans_{}".format(
-            today.strftime("%Y%m%d")
-        )
+        ARTIFACT_ROOT + "/model/clustering/kmeans_{}".format(today.strftime("%Y%m%d"))
     )
 
     transformed = model.transform(train).select("cif_number", "prediction")
@@ -192,7 +184,7 @@ def main(argv=None):
     writeData(
         cluster_probability,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_cluster_probability",
         partition="training_date",
     )
@@ -206,7 +198,7 @@ def main(argv=None):
     writeData(
         customer_cluster,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_customer_cluster",
         partition="predict_date",
     )

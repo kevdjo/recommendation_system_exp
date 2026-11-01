@@ -40,11 +40,9 @@ validate: ## Validate the bundle against dev without deploying
 
 deploy-dev: ## Deploy this project to YOUR dev identity (not CI/CD)
 	databricks bundle deploy -t dev
+
 run-train-dev: ## Trigger train_job in dev and tail the run
 	databricks bundle run train_job -t dev
-
-run-score-dev: ## Trigger score_job in dev and tail the run
-	databricks bundle run score_job -t dev
 
 # ---- local debugging against a real cluster ------------------------------
 

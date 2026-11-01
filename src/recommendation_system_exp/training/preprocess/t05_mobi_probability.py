@@ -9,35 +9,28 @@ import pyspark.sql.functions as F
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import (
+    Bucketizer,
     OneHotEncoder,
-    QuantileDiscretizer,
     StringIndexer,
     VectorAssembler,
 )
-from pyspark.sql import SparkSession
 from pyspark.sql.types import FloatType
-from support_function import Performance, getConfig, writeData
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB
+from recommendation_system_exp.support_function import (
+    Performance,
+    getConfig,
+    writeData,
+)
 
 
 def main(argv=None):
     """Job entry point (design plan section 5.1, T1). Parameters: none."""
-    spark = (
-        SparkSession.builder.appName("recommendation_system")
-        .config("spark.driver.memory", "32g")  # '8g'
-        .config("spark.executor.cores", "5")
-        .config("spark.executor.instances", "14")
-        .config("spark.executor.memory", "32g")  # '8g'
-        .config("spark.dynamicAllocation.enabled", "false")
-        .config("spark.debug.maxToStringFields", "100")
-        .config("spark.driver.memoryOverhead", "8192")
-        .config("spark.executor.memoryOverhead", "8192")
-        .config("spark.network.timeout", "800")
-        .config("spark.yarn.queue", "root.hdp_ds")
-        .config("spark.setHandleInvalid", "keep")
-        .getOrCreate()
-    )
+    # Migration: Serverless manages compute; legacy YARN/executor configs removed.
+    spark = get_spark()
 
-    sc = spark.sparkContext
+    sc = None  # Migration: no SparkContext on Serverless (Spark Connect)
     sys.path.insert(0, "./recommendation_system/script/")
 
     today = getConfig("core", "today")
@@ -46,7 +39,7 @@ def main(argv=None):
     get_probability = F.udf(lambda v: float(v[1]), FloatType())
 
     queries = "SELECT * FROM {}.{} WHERE partition_date='{}'".format(
-        "mldb", "mii_rs_customers", today.strftime("%Y-%m-%d")
+        OUTPUT_DB, "mii_rs_customers", today.strftime("%Y-%m-%d")
     )
     dataset = spark.sql(
         queries
@@ -54,13 +47,13 @@ def main(argv=None):
     dataset = dataset.repartition("cif_number")
 
     fpath = getConfig("prediction", "age_bucketizer_fpath", sc)
-    bucketizer = QuantileDiscretizer.load(fpath)
+    bucketizer = Bucketizer.load(fpath)
     dataset = bucketizer.transform(dataset)
     c = "age"
     dataset = dataset.withColumn(c + "_group", F.col(c + "_group").cast("string"))
 
     today_str = today.strftime("%Y-%m-%d")
-    queries = f"SELECT cif_number, cluster FROM mldb.mii_rs_customer_cluster WHERE predict_date='{today_str}'"
+    queries = f"SELECT cif_number, cluster FROM {OUTPUT_DB}.mii_rs_customer_cluster WHERE predict_date='{today_str}'"
     customer_cluster = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_customer_cluster (K7 tables, K4-TBL-004)
@@ -68,7 +61,7 @@ def main(argv=None):
 
     dataset = dataset.join(customer_cluster, on="cif_number", how="inner")
 
-    queries = f"SELECT cif_number, rfm_description FROM mldb.mii_rs_customer_rfm WHERE partition_date = '{today_str}'"
+    queries = f"SELECT cif_number, rfm_description FROM {OUTPUT_DB}.mii_rs_customer_rfm WHERE partition_date = '{today_str}'"
     rfm_customer = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_customer_rfm (K7 tables, K4-TBL-004)
@@ -76,12 +69,12 @@ def main(argv=None):
 
     dataset = dataset.join(rfm_customer, on="cif_number", how="inner")
 
-    queries = f"SELECT cluster, cluster_probability FROM mldb.mii_rs_cluster_probability WHERE training_date='{today_str}'"
+    queries = f"SELECT cluster, cluster_probability FROM {OUTPUT_DB}.mii_rs_cluster_probability WHERE training_date='{today_str}'"
     cluster_probability = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_cluster_probability (K7 tables, K4-TBL-004)
 
-    queries = f"SELECT rfm_description, rfm_probability FROM mldb.mii_rs_rfm_probability WHERE training_date='{today_str}'"
+    queries = f"SELECT rfm_description, rfm_probability FROM {OUTPUT_DB}.mii_rs_rfm_probability WHERE training_date='{today_str}'"
     rfm_probability = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_rfm_probability (K7 tables, K4-TBL-004)
@@ -93,13 +86,15 @@ def main(argv=None):
 
     dataset = dataset.fillna(0, subset=["cluster_probability", "rfm_probability"])
 
-    queries = "SELECT cif_number, loan_credit_facility FROM mldb.mii_rs_loan_journey"
+    queries = (
+        f"SELECT cif_number, loan_credit_facility FROM {OUTPUT_DB}.mii_rs_loan_journey"
+    )
     loan_journey = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_loan_journey (K7 tables, K4-TBL-004)
     loan_journey = loan_journey.repartition("cif_number")
 
-    queries = "SELECT * FROM mldb.mii_rs_customer_journey"
+    queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_customer_journey"
     customer_journey = spark.sql(
         queries
     )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_customer_journey (K7 tables, K4-TBL-004)
@@ -111,7 +106,7 @@ def main(argv=None):
     dataset = dataset.fillna("non loan", subset=["loan_credit_facility"])
     dataset = dataset.fillna("none", subset=["journey"])
 
-    writeData(dataset, spark, "mldb", "mii_rs_master_customers")
+    writeData(dataset, spark, OUTPUT_DB, "mii_rs_master_customers")
 
     exCol = [
         "cif_number",
@@ -152,7 +147,7 @@ def main(argv=None):
         "cif_number", "features", "flag_mobi", "active_flag"
     )
 
-    fpath = "./recommendation_system/pipeline/mobi/preprocessing_{}".format(
+    fpath = ARTIFACT_ROOT + "/pipeline/mobi/preprocessing_{}".format(
         today.strftime("%Y%m%d")
     )
     preprocessing.write().overwrite().save(fpath)
@@ -162,9 +157,7 @@ def main(argv=None):
     estimator = GBTClassifier(featuresCol="features", labelCol="label")
     model = estimator.fit(train)
 
-    fpath = "./recommendation_system/model/mobi/model_{}".format(
-        today.strftime("%Y%m%d")
-    )
+    fpath = ARTIFACT_ROOT + "/model/mobi/model_{}".format(today.strftime("%Y%m%d"))
     model.write().overwrite().save(fpath)
 
     result = model.transform(train)
@@ -188,7 +181,7 @@ def main(argv=None):
     writeData(
         model_summary,
         spark,
-        "mldb",
+        OUTPUT_DB,
         "mii_rs_mobi_model_summary",
         partition="training_date",
     )
@@ -203,7 +196,7 @@ def main(argv=None):
 
     result = result.withColumn("predict_date", F.lit(today_str))
     writeData(
-        result, spark, "mldb", "mii_rs_mobi_probability", partition="predict_date"
+        result, spark, OUTPUT_DB, "mii_rs_mobi_probability", partition="predict_date"
     )
 
     # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

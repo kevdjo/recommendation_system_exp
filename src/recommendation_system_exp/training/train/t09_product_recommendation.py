@@ -7,60 +7,28 @@ from datetime import datetime
 
 import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
+from pyspark.ml.classification import (  # noqa: F401  (used via eval)
+    DecisionTreeClassificationModel,
+    GBTClassificationModel,
+    RandomForestClassificationModel,
+)
 from pyspark.ml.feature import VectorAssembler
-from pyspark.sql import SparkSession
 from pyspark.sql.types import DoubleType, FloatType, StringType, StructField, StructType
 from pyspark.sql.window import Window
-from support_function import getConfig, writeData
+
+from recommendation_system_exp.common.spark import get_spark
+from recommendation_system_exp.config.configuration import ARTIFACT_ROOT, OUTPUT_DB  # noqa: F401
+from recommendation_system_exp.support_function import getConfig, writeData
 
 log = logging.getLogger(__name__)
 sys.path.insert(0, "./recommendation_system/script/")
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-)
 # from pyspark.ml.classification import GBTClassifier, GBTClassificationModel
 
-# spark = (SparkSession
-#         .builder
-#         .appName('recommendation_system')
-#         .config('spark.driver.memory', '63g') #'32g')
-#         .config('spark.executor.cores', '5')
-#         .config('spark.executor.instances', '14')
-#         .config('spark.executor.memory', '125g') #'32g')
-#         .config('spark.dynamicAllocation.enabled', 'false')
-#         .config('spark.debug.maxToStringFields', "100")
-#         .config('spark.sql.crossJoin.enabled', "true")
-#         .config('spark.driver.memoryOverhead', '2048')
-#         .config('spark.executor.memoryOverhead', '2048')
-#         .config('spark.network.timeout', '500')
-#         .config("spark.yarn.queue", "root.hdp_ds")
-#         .config("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "true")
-spark = (
-    SparkSession.builder.appName("recommendation_system")
-    .config("spark.driver.memory", "16g")  # 16g
-    .config("spark.executor.cores", "5")  #'5'
-    .config("spark.executor.instances", "11")
-    .config("spark.executor.memory", "32g")  # 16g
-    .config("spark.dynamicAllocation.enabled", "true")  #'true'
-    .config("spark.debug.maxToStringFields", "25")
-    .config("spark.sql.crossJoin.enabled", "false")
-    .config("spark.driver.memoryOverhead", "8192")  # 2048
-    .config("spark.executor.memoryOverhead", "8192")  # 2048
-    .config("spark.network.timeout", "800")
-    .config("spark.yarn.queue", "root.hdp_ds")
-    .config("spark.default.parallelism", "50")
-    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    .config("spark.shuffle.partitions", "100")
-    .config("spark.sql.shuffle.partitions", "100")
-    .config("spark.shuffle.partitions", "100")
-    .config("spark.shuffle.compression.codec", "snappy")
-    .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-    .config("spark.sql.execution.arrow.fallback.enabled", "true")
-    .getOrCreate()
-)
+# Migration: Serverless manages compute; legacy YARN/executor configs removed.
+spark = get_spark()
 
-sc = spark.sparkContext
+sc = None  # Migration: no SparkContext on Serverless (Spark Connect)
 get_probability = F.udf(lambda v: float(v[1]), FloatType())
 
 
@@ -89,7 +57,7 @@ def get_recommended_product(df):
     return df
 
 
-queries = "SELECT * FROM mldb.mii_rs_tf_product_portfolio"
+queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_tf_product_portfolio"
 dataset = spark.sql(
     queries
 )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_tf_product_portfolio (K7 tables, K4-TBL-004)
@@ -120,7 +88,7 @@ max_month_int = (
     dataset.select(F.max("month_int").alias("max_month_int")).collect()[0].max_month_int
 )
 
-queries = "SELECT * FROM mldb.mii_rs_master_customers"
+queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_master_customers"
 df_details = spark.sql(
     queries
 )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_master_customers (K7 tables, K4-TBL-004)
@@ -185,7 +153,7 @@ diff_conds = []
 w = Window().partitionBy("cif_number").orderBy("month_int")
 shift_val = 1
 name = "id_shift_" + str(shift_val)
-dataset = dataset.withColumn(name, F.lag("cif_number", count=shift_val).over(w))
+dataset = dataset.withColumn(name, F.lag("cif_number", offset=shift_val).over(w))
 dataset = dataset.withColumn(
     name, F.when(F.col(name).isNull(), 0).otherwise(F.col(name))
 )
@@ -198,7 +166,7 @@ dataset = dataset.drop(name)
 
 for p in product:
     name = p + "_s_" + str(shift_val)
-    dataset = dataset.withColumn(name, F.lag(p, count=shift_val).over(w))
+    dataset = dataset.withColumn(name, F.lag(p, offset=shift_val).over(w))
     diff_cond = "diff_cond_" + str(shift_val)
     dataset = dataset.withColumn(
         name, F.when(F.col(diff_cond) == 1, F.lit(0)).otherwise(F.col(name))
@@ -223,7 +191,7 @@ dataset = dataset.fillna(0)
 
 # load model summary
 training_date = getConfig("prediction", "training_date")
-queries = "SELECT * FROM mldb.mii_rs_model_summary"
+queries = f"SELECT * FROM {OUTPUT_DB}.mii_rs_model_summary"
 model_summary = spark.sql(
     queries
 )  # OPEN / TO BE VALIDATED: Unity Catalog names for mldb.mii_rs_model_summary (K7 tables, K4-TBL-004)
@@ -304,7 +272,11 @@ prediction = prediction.groupBy("cif_number").apply(get_recommended_product)
 
 prediction = prediction.withColumn("predict_date", F.lit(today.strftime("%Y-%m-%d")))
 writeData(
-    prediction, spark, "mldb", "mii_rs_product_recommendation", partition="predict_date"
+    prediction,
+    spark,
+    OUTPUT_DB,
+    "mii_rs_product_recommendation",
+    partition="predict_date",
 )
 
 # removed by ws4conv (K4-SPK-006): do not stop the shared session on Databricks

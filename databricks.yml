@@ -1,6 +1,6 @@
 # recommendation_system_exp/databricks.yml
 #
-# Databricks Asset Bundle for me_recomendation.
+# Databricks Asset Bundle for recommendation_system_exp.
 # Project type: modeling_batch
 # Compute type: serverless
 
@@ -22,29 +22,29 @@ variables:
     default: dev_catalog
   schema:
     description: "UC schema for this project (provisioned by infra/platform)"
-    default: me_recomendation
-  raw_catalog:
-    description: "UC catalog that holds upstream raw tables"
-    default: dev_raw_catalog
-  raw_schema:
-    description: "UC schema within raw_catalog for upstream raw tables"
-    default: raw
+    default: recommendation_system_exp
+  output_db:
+    description: "UC schema the legacy mldb.* output tables resolve to"
+    default: mldb
+  source_db:
+    description: "UC schema the legacy dm_analytics.* source tables resolve to"
+    default: dm_analytics
   model_name:
     description: "UC registered model name"
-    default: me_recomendation_model
+    default: recommendation_system_exp_model
   job_pause_status:
     description: "Whether scheduled jobs are active; only prod runs unpaused"
-    default: "PAUSED"
+    default: "PAUSED" 
   failure_email:
     description: "Email to notify on job failure."
 
   # Schedules
   train_cron:
     description: "Cron for train_job"
-    default: "0 0 2 ? * SUN"
+    default: "0 0 21 3 * ?"
   score_cron:
     description: "Cron for score_job"
-    default: "0 0 5 * * ?"
+    default: "0 0 23 ? * FRI"
   schedule_timezone:
     description: "Timezone for schedules"
     default: "Asia/Jakarta"
@@ -54,12 +54,15 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://dev-workspace.cloud.databricks.com
+      host: https://dbc-74da1b76-dd4d.cloud.databricks.com/
     run_as:
       user_name: ${workspace.current_user.userName}
     variables:
       catalog: dev_catalog
-      raw_catalog: dev_raw_catalog
+      # For now dev runs on the dry-run scratch objects (see dry_run/).
+      schema: dryrun_mldb
+      output_db: dryrun_mldb
+      source_db: dryrun_dm_analytics
       failure_email: ${workspace.current_user.userName}
 
   staging:
@@ -70,7 +73,6 @@ targets:
       service_principal_name: svc-dab-staging
     variables:
       catalog: stg_catalog
-      raw_catalog: stg_raw_catalog
       failure_email: "<staging-team-alias@your-org.example>"
       job_pause_status: "PAUSED"
 
@@ -82,6 +84,5 @@ targets:
       service_principal_name: svc-dab-prod
     variables:
       catalog: prod_catalog
-      raw_catalog: prod_raw_catalog
       failure_email: "<prod-oncall@your-org.example>"
       job_pause_status: "UNPAUSED"
