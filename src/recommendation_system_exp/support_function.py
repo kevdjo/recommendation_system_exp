@@ -62,11 +62,11 @@ def getConfig(str1, str2, sc=None):
         elif str2 == "clustering_model_fpath":
             fdir = f"{ARTIFACT_ROOT}/model/clustering/"
             return fdir + getLastFile(fdir, sc)
-        elif str2 == "mobi_preprocessing_fpath":
-            fdir = f"{ARTIFACT_ROOT}/pipeline/mobi/"
+        elif str2 == "simobi_preprocessing_fpath":
+            fdir = f"{ARTIFACT_ROOT}/pipeline/simobi/"
             return fdir + getLastFile(fdir, sc)
-        elif str2 == "mobi_model_fpath":
-            fdir = f"{ARTIFACT_ROOT}/model/mobi/"
+        elif str2 == "simobi_model_fpath":
+            fdir = f"{ARTIFACT_ROOT}/model/simobi/"
             return fdir + getLastFile(fdir, sc)
         elif str2 == "assembler_fpath":
             fdir = f"{ARTIFACT_ROOT}/pipeline/assembler/"
@@ -161,11 +161,11 @@ def model_comparison(spark):
         value = f"{ARTIFACT_ROOT}/model/clustering/kmeans_{training_date}"
         setConfig("prediction", "clustering_model_fpath", value)
 
-        value = f"{ARTIFACT_ROOT}/pipeline/mobi/preprocessing_{training_date}"
-        setConfig("prediction", "mobi_preprocessing_fpath", value)
+        value = f"{ARTIFACT_ROOT}/pipeline/simobi/preprocessing_{training_date}"
+        setConfig("prediction", "simobi_preprocessing_fpath", value)
 
-        value = f"{ARTIFACT_ROOT}/model/mobi/model_{training_date}"
-        setConfig("prediction", "mobi_model_fpath", value)
+        value = f"{ARTIFACT_ROOT}/model/simobi/model_{training_date}"
+        setConfig("prediction", "simobi_model_fpath", value)
 
         value = f"{ARTIFACT_ROOT}/pipeline/binarizer/binarizer_{training_date}"
         setConfig("prediction", "binarizer_fpath", value)
@@ -179,8 +179,8 @@ def model_comparison(spark):
         setConfig("prediction", "age_bucketizer_fpath")
         setConfig("prediction", "customer_preprocessing_fpath")
         setConfig("prediction", "clustering_model_fpath")
-        setConfig("prediction", "mobi_preprocessing_fpath")
-        setConfig("prediction", "mobi_model_fpath")
+        setConfig("prediction", "simobi_preprocessing_fpath")
+        setConfig("prediction", "simobi_model_fpath")
         setConfig("prediction", "binarizer_fpath")
 
 

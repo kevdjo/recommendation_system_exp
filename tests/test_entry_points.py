@@ -14,7 +14,7 @@ TRAINING_TASKS = [
     "training/preprocess/t02_rfm_analysis.py",
     "training/preprocess/t03_customer_segmentation.py",
     "training/preprocess/t04_product_preprocessing.py",
-    "training/preprocess/t05_mobi_probability.py",
+    "training/preprocess/t05_simobi_probability.py",
     "training/preprocess/t06_product_transformation.py",
     "training/train/t07_model_selection.py",
     "training/train/t08_model_optimization.py",

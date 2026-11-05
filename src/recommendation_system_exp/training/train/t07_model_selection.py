@@ -143,7 +143,7 @@ sel_cols = [
     "join_month",
     "join_day",
     "active_flag",
-    "flag_mobi",
+    "flag_simobi",
     "payroll_flag",
 ]
 sel_cols += [c + "Scaled" for c in numerical_cols] + [

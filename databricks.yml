@@ -34,8 +34,8 @@ variables:
     default: recommendation_system_exp_model
   job_pause_status:
     description: "Whether scheduled jobs are active; only prod runs unpaused"
-    default: "PAUSED" 
-  failure_email:
+    default: "PAUSED"
+  email:
     description: "Email to notify on job failure."
 
   # Schedules
@@ -63,7 +63,7 @@ targets:
       schema: dryrun_mldb
       output_db: dryrun_mldb
       source_db: dryrun_dm_analytics
-      failure_email: ${workspace.current_user.userName}
+      email: ${workspace.current_user.userName}
 
   staging:
     mode: production
@@ -73,7 +73,7 @@ targets:
       service_principal_name: svc-dab-staging
     variables:
       catalog: stg_catalog
-      failure_email: "<staging-team-alias@your-org.example>"
+      email: "<staging-team-alias@your-org.example>"
       job_pause_status: "PAUSED"
 
   prod:
@@ -84,5 +84,5 @@ targets:
       service_principal_name: svc-dab-prod
     variables:
       catalog: prod_catalog
-      failure_email: "<prod-oncall@your-org.example>"
+      email: "<prod-oncall@your-org.example>"
       job_pause_status: "UNPAUSED"

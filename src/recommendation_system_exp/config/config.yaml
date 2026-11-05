@@ -19,7 +19,7 @@ customer_data_preprocessing:
     - income_level
     - gender
     - job_desc
-    - flag_mobi
+    - flag_simobi
     - cif_syariah
   dpk_used_cols:
     - report_date
@@ -136,10 +136,10 @@ model_selection:
     - RandomForestClassifier
     - DecisionTreeClassifier
 
-# Restored from the previous commit (simobi -> mobi).
+# Restored from the previous commit (simobi -> simobi).
 # Artifact keys (training_date, fe_fpath, model_fpath, *_bucketizer_fpath,
 # binarizer_fpath, customer_preprocessing_fpath, clustering_model_fpath,
-# mobi_preprocessing_fpath, mobi_model_fpath) are deliberately NOT set here:
+# simobi_preprocessing_fpath, simobi_model_fpath) are deliberately NOT set here:
 #   - when absent, support_function.getConfig falls back to the latest artifact
 #     under core.artifact_root (legacy behaviour);
 #   - model_comparison() (training step 08) persists training_date and the
